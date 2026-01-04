@@ -1,30 +1,39 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
-  <head>
+<head>
     <meta charset="utf-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Mover Card</title>
-    <!-- SDK (On-Prem) -->
-    <script src="/_static/tfs/Dev19.M235.2/_scripts/TFS/min/VSS/SDK/VSS.SDK.js" defer></script>
+    <script src="sdk/scripts/VSS.SDK.min.js"></script>
     <link rel="stylesheet" href="css/no-style.css" />
-  </head>
-  <body>
+    <style>
+        .error { color: #f24e4e; font-size: 11px; margin-top: 5px; display: block; }
+        .success { color: #53d038; font-size: 11px; margin-top: 5px; display: block; }
+    </style>
+</head>
+<body>
     <div id="move-card-root">
-      <div>
-        <label for="boardSelect">Time (board)</label>
-        <select id="boardSelect"><option>Carregando...</option></select>
-      </div>
-      <div class="row">
-        <label for="columnSelect">Coluna</label>
-        <select id="columnSelect"><option>—</option></select>
-      </div>
-      <div class="row">
-        <button id="moveBtn">Mover</button>
-      </div>
-      <div id="status"></div>
+        <div>
+            <label for="boardSelect">Time (Board)</label>
+            <select id="boardSelect"><option>Iniciando...</option></select>
+        </div>
+        <div style="margin-top: 6px;">
+            <label for="columnSelect">Coluna Destino</label>
+            <select id="columnSelect" disabled><option>—</option></select>
+        </div>
+        <div style="margin-top: 8px;">
+            <button id="moveBtn" class="btn-primary" disabled>Mover Card</button>
+        </div>
+        <div id="status"></div>
     </div>
 
-    <script src="scripts/move-card.js" defer></script>
-  </body>
+    <script type="text/javascript">
+        VSS.init({
+            explicitNotifyLoaded: true,
+            usePlatformScripts: true,
+            usePlatformStyles: true
+        });
+        
+        VSS.require(["scripts/move-card"], function (moveCard) { });
+    </script>
+</body>
 </html>

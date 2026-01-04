@@ -1,405 +1,202 @@
-/* globals VSS */
-/*
-  move-card.js - versão final com fallback REST robusto
-  - Registra contribution id: JeffersonMota.move-card-onprem.move-card-form-group
-  - Usa SDK RestClients quando disponíveis
-  - Fallback: tenta múltiplos endpoints REST com fetch(credentials:'same-origin')
-  - Atualiza System.State via WorkItemTracking RestClient (ou PATCH fetch se necessario)
-*/
+define(["require", "exports", "TFS/Core/RestClient", "TFS/Work/RestClient", "TFS/WorkItemTracking/RestClient"], 
+function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
+    "use strict";
 
-(function () {
-  'use strict';
+    // Registrar o objeto corretamente para evitar o erro "undefined"
+    var provider = {
+        // Se precisar de callbacks do form no futuro
+    };
+    
+    // Registra usando o ID dinâmico da contribuição para evitar falhas
+    VSS.register(VSS.getContribution().id, provider);
 
-  VSS.init({ explicitNotifyLoaded: true, usePlatformScripts: true });
+    // --- CONFIGURAÇÃO ---
+    var $boardSelect = document.getElementById("boardSelect");
+    var $columnSelect = document.getElementById("columnSelect");
+    var $moveBtn = document.getElementById("moveBtn");
+    var $status = document.getElementById("status");
+    
+    var context = VSS.getWebContext();
+    var currentColumns = [];
 
-  // Utilitários
-  function log(...args) { console.log('[move-card]', ...args); }
-  function warn(...args) { console.warn('[move-card]', ...args); }
-  function error(...args) { console.error('[move-card]', ...args); }
-
-  function setStatus($statusEl, text, isError) {
-    if ($statusEl) {
-      $statusEl.textContent = text;
-      $statusEl.classList.toggle('error', Boolean(isError));
-    }
-    log('status:', text);
-  }
-
-  // Fetch com credentials (mesma origem)
-  async function fetchWithCredentials(url, opts = {}) {
-    const finalOpts = Object.assign({}, opts, { credentials: 'same-origin' });
-    log('fetch', url, finalOpts);
-    const resp = await fetch(url, finalOpts);
-    return resp;
-  }
-
-  // Constrói base da collection (ex: http://jefferson/DefaultCollection/)
-  function collectionBase(webContext) {
-    return webContext.collection.uri.replace(/\/+$/, '') + '/';
-  }
-
-  // --- Controller principal (cria UI e lógica) ---
-  function createController(root) {
-    const $board = root.querySelector('#boardSelect');
-    const $column = root.querySelector('#columnSelect');
-    const $moveBtn = root.querySelector('#moveBtn');
-    const $status = root.querySelector('#status');
-
-    const webContext = VSS.getWebContext();
-    let workItemId = null;
-    let workItemType = null;
-    let teamsCache = [];
-    let columnsCache = [];
-    const selectedBoards = new Map();
-
-    // Obtém workItemId e tipo via WorkItemFormService
-    async function ensureWorkItemInfo() {
-      if (workItemId && workItemType) return { workItemId, workItemType };
-      try {
-        const wiService = await VSS.getService(VSS.ServiceIds.WorkItemFormService);
-        workItemId = await wiService.getId();
-        workItemType = await wiService.getFieldValue('System.WorkItemType');
-        log('workItem', { workItemId, workItemType });
-        return { workItemId, workItemType };
-      } catch (err) {
-        throw new Error('Erro ao obter dados do work item: ' + err);
-      }
-    }
-
-    function apiBase() {
-      return collectionBase(webContext);
-    }
-
-    function buildUrl(path) {
-      return apiBase() + path.replace(/^\/+/, '');
-    }
-
-    // --- LISTAR TIMES ---
-    async function loadBoards() {
-      $board.disabled = true;
-      $board.innerHTML = '<option>Carregando...</option>';
-      setStatus($status, 'Listando times...', false);
-
-      const projectName = encodeURIComponent(webContext.project.name);
-      const projectId = encodeURIComponent(webContext.project.id);
-
-      const urls = [
-        buildUrl(`_apis/projects/${projectId}/teams?api-version=5.0`),
-        buildUrl(`_apis/projects/${projectName}/teams?api-version=5.0`),
-        buildUrl(`${projectName}/_apis/teams?api-version=5.0`),
-        buildUrl(`_apis/teams?api-version=5.0`)
-      ];
-
-      let lastErr = null;
-      for (const url of urls) {
-        try {
-          const res = await fetchWithCredentials(url);
-          if (!res.ok) {
-            const txt = await res.text().catch(() => '');
-            lastErr = `HTTP ${res.status} ${res.statusText} - ${txt}`;
-            warn('loadBoards non-ok', url, lastErr);
-            continue;
-          }
-          const json = await res.json();
-          const teams = json.value || [];
-          if (!teams.length) {
-            lastErr = 'Nenhum time retornado de ' + url;
-            continue;
-          }
-          teamsCache = teams.map(t => ({ id: t.id, name: t.name || t.displayName || t.id }));
-          populateBoardSelect();
-          setStatus($status, 'Times carregados', false);
-          if (teamsCache.length) loadColumnsForTeam(teamsCache[0].id);
-          return;
-        } catch (err) {
-          warn('loadBoards error', url, err);
-          lastErr = err;
+    function logStatus(msg, type) {
+        console.log("[move-card] " + msg);
+        if ($status) {
+            $status.innerText = msg; // Usar innerText é mais seguro que textContent as vezes
+            $status.className = type || "";
         }
-      }
-
-      $board.innerHTML = '<option>Erro</option>';
-      setStatus($status, 'Erro ao listar times. Último erro: ' + lastErr, true);
     }
 
-    function populateBoardSelect() {
-      $board.innerHTML = '';
-      if (!teamsCache || !teamsCache.length) {
-        $board.innerHTML = '<option>(nenhum time)</option>';
-        $board.disabled = true;
-        return;
-      }
-      teamsCache.forEach(team => {
-        const opt = document.createElement('option');
-        opt.value = team.id;
-        opt.textContent = team.name;
-        $board.appendChild(opt);
-      });
-      $board.disabled = false;
-    }
-
-    // --- LISTAR COLUNAS PARA UM TIME ---
-    async function loadColumnsForTeam(teamId) {
-      const team = teamsCache.find(t => t.id === teamId);
-      $column.disabled = true;
-      $column.innerHTML = '<option>Carregando...</option>';
-      setStatus($status, 'Listando colunas para o time: ' + (team ? team.name : teamId), false);
-      columnsCache = [];
-
-      await ensureWorkItemInfo();
-
-      const projectName = encodeURIComponent(webContext.project.name);
-      const teamSegment = team ? encodeURIComponent(team.name) : encodeURIComponent(teamId);
-
-      // Descobrir board do time
-      const boardListUrls = [
-        buildUrl(`${projectName}/${teamSegment}/_apis/work/boards?api-version=5.0`),
-        buildUrl(`${projectName}/${teamId}/_apis/work/boards?api-version=5.0`),
-        buildUrl(`_apis/work/teams/${teamId}/boards?api-version=5.0`)
-      ];
-
-      let board = selectedBoards.get(teamId) || null;
-      let lastErr = null;
-
-      if (!board) {
-        for (const url of boardListUrls) {
-          try {
-            const res = await fetchWithCredentials(url);
-            if (!res.ok) {
-              const txt = await res.text().catch(() => '');
-              lastErr = `HTTP ${res.status} ${res.statusText} - ${txt}`;
-              warn('board list non-ok', url, lastErr);
-              continue;
-            }
-            const json = await res.json();
-            const boards = json.value || [];
-            if (!boards.length) {
-              lastErr = 'Nenhum board retornado de ' + url;
-              continue;
-            }
-            board = boards.find(b => b.isDefault) || boards[0];
-            selectedBoards.set(teamId, board);
-            break;
-          } catch (err) {
-            warn('board list error', url, err);
-            lastErr = err;
-          }
+    // Função auxiliar para tratamento de erros
+    function handleError(err, contextMsg) {
+        console.error("[move-card-error] " + contextMsg, err);
+        var msg = err.message || (err.responseText ? err.responseText : "Erro desconhecido");
+        
+        if (msg.indexOf("401") !== -1 || msg.indexOf("Unauthorized") !== -1) {
+            logStatus("Erro de Permissão (401). Verifique se o usuário tem acesso aos Boards.", "error");
+        } else if (msg.indexOf("Access-Control-Allow-Origin") !== -1) {
+            logStatus("Erro de CORS (Rede). O servidor bloqueou a requisição.", "error");
+        } else {
+            logStatus("Erro: " + msg, "error");
         }
-      }
-
-      if (!board) {
-        $column.innerHTML = '<option>Erro ao achar board</option>';
-        setStatus($status, 'Não foi possível identificar um board para este time. Último erro: ' + lastErr, true);
-        return;
-      }
-
-      // Buscar colunas do board
-      const columnUrls = [
-        buildUrl(`${projectName}/${teamSegment}/_apis/work/boards/${board.id}/columns?api-version=5.0`),
-        buildUrl(`${projectName}/${teamId}/_apis/work/boards/${board.id}/columns?api-version=5.0`),
-        buildUrl(`_apis/work/teams/${teamId}/boards/${board.id}/columns?api-version=5.0`)
-      ];
-
-      lastErr = null;
-      for (const url of columnUrls) {
-        try {
-          const res = await fetchWithCredentials(url);
-          if (!res.ok) {
-            const txt = await res.text().catch(() => '');
-            lastErr = `HTTP ${res.status} ${res.statusText} - ${txt}`;
-            warn('columns non-ok', url, lastErr);
-            continue;
-          }
-          const json = await res.json();
-          const cols = json.value || json.columns || [];
-          if (!cols.length) {
-            lastErr = 'Nenhuma coluna retornada de ' + url;
-            continue;
-          }
-          columnsCache = cols;
-          populateColumnSelect();
-          setStatus($status, 'Colunas carregadas', false);
-          return;
-        } catch (err) {
-          warn('columns error', url, err);
-          lastErr = err;
-        }
-      }
-
-      $column.innerHTML = '<option>Erro</option>';
-      setStatus($status, 'Falha ao buscar colunas. Último erro: ' + lastErr, true);
     }
 
-    function mappedStateForColumn(column) {
-      if (!column) return null;
-      // VSTS/ADO columns normalmente expõem stateMappings com o tipo do work item
-      if (column.stateMappings) {
-        if (workItemType && column.stateMappings[workItemType]) {
-          return column.stateMappings[workItemType];
-        }
-        const values = Object.keys(column.stateMappings).map(k => column.stateMappings[k]).filter(Boolean);
-        if (values.length) return values[0];
-      }
-      if (column.mappedStates && column.mappedStates.length) {
-        return column.mappedStates[0];
-      }
-      return null;
-    }
-
-    function populateColumnSelect() {
-      $column.innerHTML = '';
-      if (!columnsCache || !columnsCache.length) {
-        $column.innerHTML = '<option>—</option>';
-        $column.disabled = true;
-        return;
-      }
-      columnsCache.forEach(c => {
-        const opt = document.createElement('option');
-        const mappedState = mappedStateForColumn(c);
-        opt.value = c.id || c.name || JSON.stringify(c);
-        opt.textContent = mappedState ? `${c.name} • ${mappedState}` : (c.name || c.displayName || c.id || 'Coluna');
-        if (mappedState) opt.dataset.state = mappedState;
-        $column.appendChild(opt);
-      });
-      $column.disabled = false;
-    }
-
-    // Quando troca de board (team)
-    $board.addEventListener('change', function () {
-      const teamId = this.value;
-      loadColumnsForTeam(teamId);
-    });
-
-    // --- ATUALIZAR WORK ITEM ---
-    // Tenta usar WorkItemTracking RestClient; se não, faz PATCH via fetch
-    function updateWorkItemState(id, newState, comment) {
-      return new Promise(function (resolve, reject) {
-        // Primeiro: tentar usar WIT RestClient
-        VSS.require(['TFS/WorkItemTracking/RestClient'], function (WitRestClient) {
-          try {
-            const witClient = WitRestClient.getClient();
-            const patch = [
-              { op: 'add', path: '/fields/System.History', value: comment || 'Movido via extensão' },
-              { op: 'add', path: '/fields/System.State', value: newState }
-            ];
-            witClient.updateWorkItem(patch, id).then(function (updated) {
-              resolve(updated);
-            }).catch(function (err) {
-              warn('WitRestClient.updateWorkItem falhou, fallback PATCH fetch:', err);
-              // fallback para fetch PATCH
-              fallbackPatchWorkItem(id, patch).then(resolve).catch(reject);
+    // 1. Carregar Times
+    function loadTeams() {
+        logStatus("Autenticando e carregando times...", "loading");
+        
+        // Obtém o cliente HTTP. O VSS injeta o token automaticamente aqui.
+        var coreClient = CoreRestClient.getClient();
+        
+        coreClient.getTeams(context.project.id).then(function(teams) {
+            $boardSelect.innerHTML = '<option value="">Selecione um time</option>';
+            
+            teams.sort(function(a, b) { return a.name.localeCompare(b.name); });
+            
+            teams.forEach(function(t) {
+                var opt = document.createElement("option");
+                opt.value = t.id;
+                opt.text = t.name;
+                $boardSelect.appendChild(opt);
             });
-          } catch (e) {
-            warn('WitRestClient error fallback', e);
-            fallbackPatchWorkItem(id, [
-              { op: 'add', path: '/fields/System.History', value: comment || 'Movido via extensão' },
-              { op: 'add', path: '/fields/System.State', value: newState }
-            ]).then(resolve).catch(reject);
-          }
-        }, function (requireErr) {
-          warn('WIT RestClient não disponível, fallback PATCH:', requireErr);
-          fallbackPatchWorkItem(id, [
-            { op: 'add', path: '/fields/System.History', value: comment || 'Movido via extensão' },
-            { op: 'add', path: '/fields/System.State', value: newState }
-          ]).then(resolve).catch(reject);
+            
+            logStatus("Times carregados.", "success");
+
+            if (context.team && context.team.id) {
+                $boardSelect.value = context.team.id;
+                loadColumns(context.team.id);
+            }
+        }, function(err) {
+            handleError(err, "Falha ao carregar times");
         });
-      });
     }
 
-    // Fallback PATCH via REST
-    async function fallbackPatchWorkItem(id, patchOps) {
-      const url = collectionBase(webContext) + encodeURIComponent(webContext.project.name) + '/_apis/wit/workitems/' + id + '?api-version=5.1';
-      log('fallbackPatchWorkItem', url, patchOps);
-      const res = await fetchWithCredentials(url, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json-patch+json' },
-        body: JSON.stringify(patchOps)
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error('PATCH falhou: ' + res.status + ' - ' + txt);
-      }
-      return res.json();
+    // 2. Carregar Colunas (Onde estava dando erro 401)
+    function loadColumns(teamId) {
+        if (!teamId) return;
+
+        $columnSelect.innerHTML = '<option>Carregando colunas...</option>';
+        $columnSelect.disabled = true;
+        $moveBtn.disabled = true;
+
+        var workClient = WorkRestClient.getClient();
+
+        // Passamos explicitamente o project e team ID
+        var teamContext = { projectId: context.project.id, teamId: teamId, project: context.project.name, team: "" };
+
+        console.log("[move-card] Buscando boards para o time ID: " + teamId);
+
+        workClient.getBoards(teamContext).then(function(boards) {
+            if (!boards || boards.length === 0) {
+                $columnSelect.innerHTML = '<option>Nenhum board encontrado</option>';
+                logStatus("Nenhum board encontrado neste time.", "error");
+                return;
+            }
+
+            // Pega o primeiro board disponível
+            var targetBoard = boards[0];
+            console.log("[move-card] Board encontrado: " + targetBoard.name + " (" + targetBoard.id + ")");
+
+            workClient.getBoard(teamContext, targetBoard.id).then(function(boardDetails) {
+                currentColumns = boardDetails.columns;
+                $columnSelect.innerHTML = ''; 
+                
+                if (!currentColumns || currentColumns.length === 0) {
+                     $columnSelect.innerHTML = '<option>Sem colunas</option>';
+                     return;
+                }
+
+                currentColumns.forEach(function(col) {
+                    var opt = document.createElement("option");
+                    opt.value = col.id;
+                    opt.text = col.name;
+                    $columnSelect.appendChild(opt);
+                });
+
+                $columnSelect.disabled = false;
+                $moveBtn.disabled = false;
+                logStatus("Pronto.", "success");
+                
+            }, function(err) {
+                handleError(err, "Falha ao pegar detalhes do board");
+            });
+
+        }, function(err) {
+            handleError(err, "Falha ao listar boards (401 aqui significa falta de escopo vso.work)");
+        });
     }
 
-    // Clique no botão mover
-    $moveBtn.addEventListener('click', async function () {
-      setStatus($status, 'Executando mover...', false);
-      $moveBtn.disabled = true;
-      try {
-        const { workItemId: id } = await ensureWorkItemInfo();
-        if (!id) {
-          setStatus($status, 'Work item não identificado. Abra um work item e tente novamente.', true);
-          $moveBtn.disabled = false;
-          return;
-        }
+    // 3. Mover Card
+    function moveCard() {
+        $moveBtn.disabled = true;
+        logStatus("Aguarde...", "loading");
 
-        const selectedColumnValue = $column.value;
-        const selectedColumnIndex = $column.selectedIndex;
-        const selectedColumnText = $column.options[selectedColumnIndex] ? $column.options[selectedColumnIndex].text : selectedColumnValue;
-        const selectedColumnState = $column.options[selectedColumnIndex] ? $column.options[selectedColumnIndex].dataset.state : null;
+        VSS.getService(VSS.ServiceIds.WorkItemFormService).then(function(workItemFormService) {
+            workItemFormService.getId().then(function(id) {
+                if (!id) {
+                    logStatus("Salve o Work Item primeiro.", "error");
+                    $moveBtn.disabled = false;
+                    return;
+                }
 
-        // encontrar objeto de coluna
-        let columnObj = columnsCache.find(c => (c.id && String(c.id) === String(selectedColumnValue)) || (c.name && c.name === selectedColumnText));
-        if (!columnObj) columnObj = columnsCache.find(c => c.name === selectedColumnText) || null;
+                // Pega o tipo para mapear o estado
+                workItemFormService.getFieldValue("System.WorkItemType").then(function(wiType) {
+                    
+                    var colId = $columnSelect.value;
+                    var targetCol = currentColumns.find(function(c) { return c.id === colId; });
+                    
+                    if (!targetCol) {
+                        logStatus("Coluna inválida.", "error");
+                        $moveBtn.disabled = false;
+                        return;
+                    }
 
-        // tentar extrair mapping para state
-        const targetState = selectedColumnState || mappedStateForColumn(columnObj);
+                    // Lógica de Estado
+                    var targetState = targetCol.name; 
+                    if (targetCol.stateMappings && targetCol.stateMappings[wiType]) {
+                        targetState = targetCol.stateMappings[wiType];
+                    }
 
-        if (targetState) {
-          setStatus($status, `Atualizando State -> ${targetState} ...`, false);
-          await updateWorkItemState(id, targetState, `Movido via extensão para ${selectedColumnText}`);
-          setStatus($status, `Work item ${id} atualizado. State = "${targetState}"`, false);
-          try {
-            const wiService = await VSS.getService(VSS.ServiceIds.WorkItemFormService);
-            if (wiService && wiService.refresh) wiService.refresh();
-          } catch (e) { /* não crítico */ }
-          $moveBtn.disabled = false;
-          return;
-        }
+                    console.log("[move-card] Movendo ID " + id + " para Estado: " + targetState);
 
-        setStatus($status, 'Não foi possível mapear coluna para State automaticamente.', true);
-      } catch (err) {
-        error('Erro mover:', err);
-        setStatus($status, 'Erro ao mover: ' + (err && err.message ? err.message : err), true);
-      } finally {
-        $moveBtn.disabled = false;
-      }
-    });
+                    var patchDocument = [
+                        { "op": "add", "path": "/fields/System.State", "value": targetState },
+                        { "op": "add", "path": "/fields/System.History", "value": "Movido via Extensão" }
+                    ];
 
-    // Inicial: carregar boards
-    loadBoards();
-  }
+                    var witClient = WitRestClient.getClient();
+                    
+                    witClient.updateWorkItem(patchDocument, id).then(function(updated) {
+                        logStatus("Sucesso! Recarregue a página.", "success");
+                        $moveBtn.disabled = false;
+                        
+                        // Forçar refresh no Azure DevOps On-Prem
+                        VSS.getService(VSS.ServiceIds.NavigationService).then(function(navigationService) {
+                             if(navigationService.reload) {
+                                 navigationService.reload();
+                             } else {
+                                 window.location.reload();
+                             }
+                        });
 
-  // --- Registro da contribuição ---
-  VSS.ready(function () {
-    try {
-      const contributionId = 'JeffersonMota.move-card-onprem.move-card-form-group';
-      VSS.register(contributionId, function (context) {
-        log('contribution handler invoked', context && context.instanceContext ? context.instanceContext.host : null);
-        const root = document.getElementById('move-card-root');
-        if (!root) {
-          error('Elemento root (#move-card-root) não encontrado.');
-          VSS.notifyLoadFailed('Elemento root não encontrado');
-          return {};
-        }
-        if (!root._controllerCreated) {
-          root._controllerCreated = true;
-          createController(root);
-        }
-        return {
-          onContextUpdate: function (updatedContext) {
-            log('onContextUpdate', updatedContext);
-            // Se quiser reagir a mudanças de contexto (ex: outro work item aberto), podemos recarregar aqui.
-          }
-        };
-      });
-
-      VSS.notifyLoadSucceeded();
-      log('registered and notified loaded');
-    } catch (err) {
-      error('Erro ao registrar contribution:', err);
-      try { VSS.notifyLoadFailed(err && err.message ? err.message : 'Erro desconhecido'); } catch (_) {}
+                    }, function(err) {
+                        handleError(err, "Falha ao atualizar Work Item");
+                        $moveBtn.disabled = false;
+                    });
+                });
+            });
+        }, function(err) {
+            handleError(err, "Falha ao conectar no FormService");
+        });
     }
-  });
 
-})();
+    // Eventos
+    $boardSelect.addEventListener("change", function() { loadColumns(this.value); });
+    $moveBtn.addEventListener("click", moveCard);
+
+    // Inicialização
+    loadTeams();
+    
+    // Notifica que terminou de carregar
+    VSS.notifyLoadSucceeded();
+});
