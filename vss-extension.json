@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "move-card-onprem",
     "name": "Mover Card - OnPrem",
-    "version": "0.0.8",
+    "version": "0.0.1",
     "publisher": "JeffersonMota",
     "targets": [
         {
