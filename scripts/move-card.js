@@ -22,7 +22,7 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
     function logStatus(msg, type) {
         console.log("[move-card] " + msg);
         if ($status) {
-            $status.innerText = msg; // Usar innerText é mais seguro que textContent as vezes
+            $status.innerText = msg;
             $status.className = type || "";
         }
     }
@@ -45,7 +45,6 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
     function loadTeams() {
         logStatus("Autenticando e carregando times...", "loading");
         
-        // Obtém o cliente HTTP. O VSS injeta o token automaticamente aqui.
         var coreClient = CoreRestClient.getClient();
         
         coreClient.getTeams(context.project.id).then(function(teams) {
@@ -71,7 +70,7 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
         });
     }
 
-    // 2. Carregar Colunas (Onde estava dando erro 401)
+    // 2. Carregar Colunas
     function loadColumns(teamId) {
         if (!teamId) return;
 
@@ -80,8 +79,6 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
         $moveBtn.disabled = true;
 
         var workClient = WorkRestClient.getClient();
-
-        // Passamos explicitamente o project e team ID
         var teamContext = { projectId: context.project.id, teamId: teamId, project: context.project.name, team: "" };
 
         console.log("[move-card] Buscando boards para o time ID: " + teamId);
@@ -122,7 +119,7 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
             });
 
         }, function(err) {
-            handleError(err, "Falha ao listar boards (401 aqui significa falta de escopo vso.work)");
+            handleError(err, "Falha ao listar boards");
         });
     }
 
@@ -131,7 +128,8 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
         $moveBtn.disabled = true;
         logStatus("Aguarde...", "loading");
 
-        VSS.getService(VSS.ServiceIds.WorkItemFormService).then(function(workItemFormService) {
+        // CORREÇÃO 1: Usar string direta para o Form Service
+        VSS.getService("ms.vss-work-web.work-item-form").then(function(workItemFormService) {
             workItemFormService.getId().then(function(id) {
                 if (!id) {
                     logStatus("Salve o Work Item primeiro.", "error");
@@ -139,7 +137,6 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
                     return;
                 }
 
-                // Pega o tipo para mapear o estado
                 workItemFormService.getFieldValue("System.WorkItemType").then(function(wiType) {
                     
                     var colId = $columnSelect.value;
@@ -151,7 +148,6 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
                         return;
                     }
 
-                    // Lógica de Estado
                     var targetState = targetCol.name; 
                     if (targetCol.stateMappings && targetCol.stateMappings[wiType]) {
                         targetState = targetCol.stateMappings[wiType];
@@ -170,8 +166,8 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
                         logStatus("Sucesso! Recarregue a página.", "success");
                         $moveBtn.disabled = false;
                         
-                        // Forçar refresh no Azure DevOps On-Prem
-                        VSS.getService(VSS.ServiceIds.NavigationService).then(function(navigationService) {
+                        // CORREÇÃO 2: Usar string direta para o Navigation Service também!
+                        VSS.getService("ms.vss-web.navigation-service").then(function(navigationService) {
                              if(navigationService.reload) {
                                  navigationService.reload();
                              } else {
@@ -197,6 +193,5 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
     // Inicialização
     loadTeams();
     
-    // Notifica que terminou de carregar
     VSS.notifyLoadSucceeded();
 });

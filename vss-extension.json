@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "move-card-onprem",
     "publisher": "JeffersonMota",
-    "version": "0.0.9",
+    "version": "0.0.3",
     "name": "Move Card OnPrem",
     "description": "Move cards fix permissions and layout",
     "public": true,
