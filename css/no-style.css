@@ -1,1 +1,54 @@
-:root { }
+:root {
+  color-scheme: light dark;
+}
+
+#move-card-root {
+  padding: 8px;
+  background: transparent;
+  color: var(--text-primary-color, var(--palette-neutral-foreground1, inherit));
+  font-family: "Segoe UI", "SegoeUI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+}
+
+#move-card-root label {
+  display: block;
+  margin-bottom: 4px;
+  color: inherit;
+}
+
+#move-card-root select,
+#move-card-root button {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px;
+  font-size: 12px;
+  color: inherit;
+  background-color: var(--component-background-color, transparent);
+  border: 1px solid var(--control-border-color, var(--palette-neutral-foreground3, #8a8886));
+  border-radius: 4px;
+}
+
+#move-card-root button {
+  cursor: pointer;
+  background-color: var(--button-primary-background-color, var(--palette-theme-primary, #0078d4));
+  color: var(--button-primary-foreground-color, #fff);
+  border-color: var(--button-primary-border-color, transparent);
+}
+
+#move-card-root button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+#move-card-root .row {
+  margin-top: 10px;
+}
+
+#move-card-root #status {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+#move-card-root .error {
+  color: var(--status-error-text-color, #f1707b);
+}
