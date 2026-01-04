@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mover Card</title>
+    <!-- SDK (On-Prem) -->
+    <script src="/_static/tfs/Dev19.M235.2/_scripts/TFS/min/VSS/SDK/VSS.SDK.js" defer></script>
+    <link rel="stylesheet" href="css/no-style.css" />
+    <style>
+      /* Pequeno estilo para manter leitura no card; o manifesto pediu sem formatação extra */
+      #move-card-root { font-family: Segoe UI, Arial, sans-serif; padding:8px; }
+      label { display:block; font-size:12px; margin-bottom:3px; color: #111; }
+      select, button { margin-top:6px; }
+      #status { margin-top:8px; font-size:12px; color:#333; }
+      .error { color: #b00020; }
+    </style>
+  </head>
+  <body>
+    <div id="move-card-root">
+      <div>
+        <label for="boardSelect">Board:</label>
+        <select id="boardSelect"><option>Carregando...</option></select>
+      </div>
+      <div style="margin-top:6px;">
+        <label for="columnSelect">Coluna:</label>
+        <select id="columnSelect"><option>—</option></select>
+      </div>
+      <div style="margin-top:10px;">
+        <button id="moveBtn">Mover</button>
+      </div>
+      <div id="status"></div>
+    </div>
+
+    <script src="scripts/move-card.js" defer></script>
+  </body>
+</html>

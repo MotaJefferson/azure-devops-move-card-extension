@@ -1,0 +1,47 @@
+{
+    "manifestVersion": 1,
+    "id": "move-card-onprem",
+    "name": "Mover Card - OnPrem",
+    "version": "0.0.8",
+    "publisher": "JeffersonMota",
+    "targets": [
+        {
+            "id": "Microsoft.VisualStudio.Services"
+        }
+    ],
+    "description": "Extensão para mover um work item (card) entre boards/colunas dentro do formulário do item.",
+    "icons": {
+        "default": "icon.png"
+    },
+    "categories": [
+        "Azure Boards"
+    ],
+    "files": [
+        {
+            "path": "index.html",
+            "addressable": true
+        },
+        {
+            "path": "scripts/move-card.js",
+            "addressable": true
+        },
+        {
+            "path": "css/no-style.css",
+            "addressable": true
+        }
+    ],
+    "contributions": [
+        {
+            "id": "JeffersonMota.move-card-onprem.move-card-form-group",
+            "type": "ms.vss-work-web.work-item-form-group",
+            "description": "Mover card entre boards/colunas",
+            "targets": [
+                "ms.vss-work-web.work-item-form"
+            ],
+            "properties": {
+                "name": "Mover card",
+                "uri": "http://jefferson/_static/azure-devops-move-card-extension/index.html"
+            }
+        }
+    ]
+}
