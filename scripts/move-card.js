@@ -141,7 +141,7 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
                     var sourceArea = currentValues["System.AreaPath"];
                     var sourceColumn = currentValues["System.BoardColumn"] || "Sem Coluna";
 
-                    // === LÓGICA DA MENSAGEM (RESTAURADA) ===
+                    // === LÓGICA DA MENSAGEM (ATUALIZADA) ===
                     // 1. Extrai apenas o nome do time da Área (ex: "Projeto\Time 01" vira "Time 01")
                     var sourceTeamName = sourceArea.split('\\').pop();
 
@@ -159,9 +159,10 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
                         targetState = targetCol.stateMappings[type];
                     }
 
-                    // 4. Monta a mensagem formatada
-                    var historyMessage = "Movido do " + sourceTeamName + " | " + sourceColumn + 
-                                         " para " + targetTeamName + " | " + targetColumnName;
+                    // 4. Monta a mensagem formatada com HTML para negrito
+                    // Formato: Movido do Board: [Nome], Coluna: [Nome] para Board: [Nome], Coluna: [Nome]
+                    var historyMessage = "Movido do <b>Board:</b> " + sourceTeamName + ", <b>Coluna:</b> " + sourceColumn + 
+                                         " para <b>Board:</b> " + targetTeamName + ", <b>Coluna:</b> " + targetColumnName;
 
                     // Monta o Patch JSON
                     var patchDocument = [

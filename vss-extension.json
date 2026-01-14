@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "mover-card-onprem",
     "publisher": "JeffersonMota",
-    "version": "0.0.1",
+    "version": "0.0.7",
     "name": "Mover Card",
     "description": "Mover cards entre times e colunas",
     "public": true,

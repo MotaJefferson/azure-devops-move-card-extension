@@ -1,91 +1,79 @@
-/* Força total na transparência da página base */
+/* --- ESTRUTURA BASE --- */
 html, body {
   background-color: transparent !important;
   margin: 0;
   padding: 0;
   overflow: hidden;
-  font-family: "Segoe UI", "SegoeUI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: "Segoe UI", "SegoeUI", -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 #move-card-root {
-  padding: 0px 2px;
-  /* Texto se adapta: Branco no Dark Mode, Preto no Light Mode */
-  color: var(--text-primary-color, inherit);
+  padding: 0px 4px;
+  /* Texto da aplicação em BRANCO para ler no fundo escuro */
+  color: #ffffff;
   font-size: 12px;
 }
 
-#move-card-root label {
+label {
   display: block;
   margin-bottom: 4px;
   font-weight: 600;
-  color: var(--text-secondary-color, #666666);
+  color: #f3f3f3;
 }
 
-/* --- ESTILIZAÇÃO DOS CAMPOS (SELECT) --- */
-#move-card-root select {
+/* --- COMBOS (SELECT) - O "Simples" --- */
+select {
   width: 100%;
-  box-sizing: border-box;
-  padding: 4px 6px;
+  padding: 4px;
   height: 30px;
   font-size: 12px;
   border-radius: 2px;
   outline: none;
 
-  /* FUNDO DINÂMICO: Usa a cor de fundo do tema (Preto no Dark, Branco no Light) */
-  background-color: var(--background-color, #ffffff);
-  color: var(--text-primary-color, #000000);
-  border: 1px solid var(--palette-neutral-20, #c8c8c8);
+  /* FORÇADO: Fundo Branco e Texto Preto. 
+     Isso garante que nunca fique "invisível" ou confuso. */
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  
+  border: 1px solid #cccccc;
 }
 
-#move-card-root select:disabled {
-  background-color: var(--palette-neutral-4, #f4f4f4);
-  color: var(--text-disabled-color, #a6a6a6);
-  border-color: var(--palette-neutral-10, #eaeaea);
+/* Garante que as opções também sejam preto no branco */
+select option {
+  background-color: #ffffff;
+  color: #000000;
+}
+
+select:focus {
+  border-color: #0078d4; /* Azul padrão ao clicar */
+}
+
+select:disabled {
+  opacity: 0.6;
   cursor: not-allowed;
-}
-
-#move-card-root select:focus {
-  border-color: var(--communication-background, #0078d4);
-}
-
-/* Correção para as opções dentro do Select no Dark Mode */
-#move-card-root select option {
-  background-color: var(--background-color, #ffffff);
-  color: var(--text-primary-color, #000000);
+  background-color: #e6e6e6 !important; /* Cinza claro se desabilitado */
+  color: #555555 !important;
 }
 
 /* --- BOTÃO --- */
-#move-card-root button {
+button {
   width: 100%;
-  box-sizing: border-box;
   padding: 6px;
   font-size: 12px;
   font-weight: 600;
   border-radius: 2px;
   cursor: pointer;
   margin-top: 10px;
-
-  background-color: var(--communication-background, #0078d4);
-  color: #FFFFFF;
-  border: 1px solid transparent;
+  background-color: #0078d4;
+  color: #ffffff;
+  border: none;
 }
 
-#move-card-root button:hover {
-  background-color: var(--communication-background-hover, #106ebe);
-}
-
-#move-card-root button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-  background-color: var(--palette-neutral-10, #eaeaea);
-}
+button:hover { background-color: #106ebe; }
+button:disabled { opacity: 0.6; cursor: not-allowed; background-color: #cccccc; }
 
 /* --- STATUS --- */
-#move-card-root #status {
-  margin-top: 8px;
-  font-size: 11px;
-  min-height: 15px;
-}
-#move-card-root .error { color: var(--status-error-text, #da0a00); }
-#move-card-root .success { color: var(--status-success-text, #107c10); }
-#move-card-root .loading { color: var(--text-secondary-color, #666666); font-style: italic; }
+#status { margin-top: 8px; font-size: 11px; min-height: 15px; }
+.error { color: #ff9999; }
+.success { color: #57a300; }
+.loading { color: #cccccc; font-style: italic; }
