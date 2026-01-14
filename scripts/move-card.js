@@ -2,23 +2,24 @@ define(["require", "exports", "TFS/Core/RestClient", "TFS/Work/RestClient", "TFS
 function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
     "use strict";
 
-    // Registrar o objeto corretamente para evitar o erro "undefined"
-    var provider = {
-        // Se precisar de callbacks do form no futuro
-    };
-    
-    // Registra usando o ID dinâmico da contribuição para evitar falhas
+    // --- VARIÁVEIS GLOBAIS ---
+    var provider = {};
+    // Registra a extensão
     VSS.register(VSS.getContribution().id, provider);
 
-    // --- CONFIGURAÇÃO ---
     var $boardSelect = document.getElementById("boardSelect");
     var $columnSelect = document.getElementById("columnSelect");
     var $moveBtn = document.getElementById("moveBtn");
     var $status = document.getElementById("status");
     
     var context = VSS.getWebContext();
-    var currentColumns = [];
+    var currentColumns = []; 
+    var targetTeamSettings = {
+        areaPath: null,
+        columnFieldRef: null
+    };
 
+    // --- FUNÇÕES UTILITÁRIAS ---
     function logStatus(msg, type) {
         console.log("[move-card] " + msg);
         if ($status) {
@@ -27,171 +28,180 @@ function (require, exports, CoreRestClient, WorkRestClient, WitRestClient) {
         }
     }
 
-    // Função auxiliar para tratamento de erros
     function handleError(err, contextMsg) {
         console.error("[move-card-error] " + contextMsg, err);
         var msg = err.message || (err.responseText ? err.responseText : "Erro desconhecido");
         
-        if (msg.indexOf("401") !== -1 || msg.indexOf("Unauthorized") !== -1) {
-            logStatus("Erro de Permissão (401). Verifique se o usuário tem acesso aos Boards.", "error");
-        } else if (msg.indexOf("Access-Control-Allow-Origin") !== -1) {
-            logStatus("Erro de CORS (Rede). O servidor bloqueou a requisição.", "error");
-        } else {
-            logStatus("Erro: " + msg, "error");
+        // Tratamento simples de erros comuns
+        if (msg.indexOf("HostAuthorizationNotFound") !== -1) {
+            msg = "Erro de Permissão (500). Tente reinstalar a extensão.";
         }
+
+        logStatus(msg, "error");
+        $moveBtn.disabled = false;
     }
 
-    // 1. Carregar Times
+    // --- LÓGICA ---
+
     function loadTeams() {
-        logStatus("Autenticando e carregando times...", "loading");
-        
+        logStatus("Carregando times...", "loading");
         var coreClient = CoreRestClient.getClient();
         
         coreClient.getTeams(context.project.id).then(function(teams) {
             $boardSelect.innerHTML = '<option value="">Selecione um time</option>';
-            
             teams.sort(function(a, b) { return a.name.localeCompare(b.name); });
-            
             teams.forEach(function(t) {
                 var opt = document.createElement("option");
                 opt.value = t.id;
                 opt.text = t.name;
                 $boardSelect.appendChild(opt);
             });
-            
-            logStatus("Times carregados.", "success");
-
-            if (context.team && context.team.id) {
-                $boardSelect.value = context.team.id;
-                loadColumns(context.team.id);
-            }
+            logStatus("Aguardando seleção...", "");
         }, function(err) {
             handleError(err, "Falha ao carregar times");
         });
     }
 
-    // 2. Carregar Colunas
-    function loadColumns(teamId) {
-        if (!teamId) return;
+    function loadBoardDetails(teamId) {
+        if (!teamId) {
+            $columnSelect.innerHTML = '<option>—</option>';
+            $columnSelect.disabled = true;
+            $moveBtn.disabled = true;
+            return;
+        }
 
-        $columnSelect.innerHTML = '<option>Carregando colunas...</option>';
+        $columnSelect.innerHTML = '<option>Carregando...</option>';
         $columnSelect.disabled = true;
         $moveBtn.disabled = true;
-
+        
         var workClient = WorkRestClient.getClient();
-        var teamContext = { projectId: context.project.id, teamId: teamId, project: context.project.name, team: "" };
+        var teamContext = { projectId: context.project.id, teamId: teamId };
 
-        console.log("[move-card] Buscando boards para o time ID: " + teamId);
+        Promise.all([
+            workClient.getBoards(teamContext),
+            workClient.getTeamFieldValues(teamContext)
+        ]).then(function(results) {
+            var boards = results[0];
+            var fieldValues = results[1];
 
-        workClient.getBoards(teamContext).then(function(boards) {
-            if (!boards || boards.length === 0) {
-                $columnSelect.innerHTML = '<option>Nenhum board encontrado</option>';
-                logStatus("Nenhum board encontrado neste time.", "error");
-                return;
+            targetTeamSettings.areaPath = fieldValues.defaultValue;
+
+            if (!boards || boards.length === 0) throw new Error("Sem boards neste time.");
+            var targetBoard = boards[0]; 
+
+            return workClient.getBoard(teamContext, targetBoard.id);
+
+        }).then(function(boardDetails) {
+            
+            // Detecta o campo de coluna (WEF)
+            if (boardDetails.fields && boardDetails.fields.columnField) {
+                targetTeamSettings.columnFieldRef = boardDetails.fields.columnField.referenceName;
+            } else {
+                targetTeamSettings.columnFieldRef = null; 
             }
 
-            // Pega o primeiro board disponível
-            var targetBoard = boards[0];
-            console.log("[move-card] Board encontrado: " + targetBoard.name + " (" + targetBoard.id + ")");
+            currentColumns = boardDetails.columns;
+            $columnSelect.innerHTML = ''; 
+            
+            if (!currentColumns || currentColumns.length === 0) {
+                 $columnSelect.innerHTML = '<option>Sem colunas</option>';
+                 return;
+            }
 
-            workClient.getBoard(teamContext, targetBoard.id).then(function(boardDetails) {
-                currentColumns = boardDetails.columns;
-                $columnSelect.innerHTML = ''; 
-                
-                if (!currentColumns || currentColumns.length === 0) {
-                     $columnSelect.innerHTML = '<option>Sem colunas</option>';
-                     return;
-                }
-
-                currentColumns.forEach(function(col) {
-                    var opt = document.createElement("option");
-                    opt.value = col.id;
-                    opt.text = col.name;
-                    $columnSelect.appendChild(opt);
-                });
-
-                $columnSelect.disabled = false;
-                $moveBtn.disabled = false;
-                logStatus("Pronto.", "success");
-                
-            }, function(err) {
-                handleError(err, "Falha ao pegar detalhes do board");
+            currentColumns.forEach(function(col) {
+                var opt = document.createElement("option");
+                opt.value = col.id;
+                opt.text = col.name;
+                $columnSelect.appendChild(opt);
             });
 
-        }, function(err) {
-            handleError(err, "Falha ao listar boards");
+            $columnSelect.disabled = false;
+            $moveBtn.disabled = false;
+            logStatus("Pronto.", "success");
+
+        }).catch(function(err) {
+            handleError(err, "Falha ao carregar board");
         });
     }
 
-    // 3. Mover Card
-    function moveCard() {
+    // 3. Executar Movimento
+    function executeMove() {
         $moveBtn.disabled = true;
-        logStatus("Aguarde...", "loading");
+        logStatus("Movendo...", "loading");
 
-        // CORREÇÃO 1: Usar string direta para o Form Service
         VSS.getService("ms.vss-work-web.work-item-form").then(function(workItemFormService) {
+            
             workItemFormService.getId().then(function(id) {
-                if (!id) {
-                    logStatus("Salve o Work Item primeiro.", "error");
-                    $moveBtn.disabled = false;
-                    return;
-                }
+                if (!id) { logStatus("Salve o item antes.", "error"); return; }
 
-                workItemFormService.getFieldValue("System.WorkItemType").then(function(wiType) {
+                workItemFormService.getFieldValues(["System.WorkItemType", "System.AreaPath", "System.BoardColumn"])
+                .then(function(currentValues) {
+
+                    var type = currentValues["System.WorkItemType"];
+                    var sourceArea = currentValues["System.AreaPath"];
+                    var sourceColumn = currentValues["System.BoardColumn"] || "Sem Coluna";
+
+                    // === LÓGICA DA MENSAGEM (RESTAURADA) ===
+                    // 1. Extrai apenas o nome do time da Área (ex: "Projeto\Time 01" vira "Time 01")
+                    var sourceTeamName = sourceArea.split('\\').pop();
+
+                    // 2. Pega o nome do time destino
+                    var targetTeamName = $boardSelect.options[$boardSelect.selectedIndex].text;
                     
+                    // 3. Pega a coluna destino
                     var colId = $columnSelect.value;
                     var targetCol = currentColumns.find(function(c) { return c.id === colId; });
-                    
-                    if (!targetCol) {
-                        logStatus("Coluna inválida.", "error");
-                        $moveBtn.disabled = false;
-                        return;
-                    }
+                    var targetColumnName = targetCol ? targetCol.name : "Desconhecida";
 
+                    // Mapeia Estado
                     var targetState = targetCol.name; 
-                    if (targetCol.stateMappings && targetCol.stateMappings[wiType]) {
-                        targetState = targetCol.stateMappings[wiType];
+                    if (targetCol && targetCol.stateMappings && targetCol.stateMappings[type]) {
+                        targetState = targetCol.stateMappings[type];
                     }
 
-                    console.log("[move-card] Movendo ID " + id + " para Estado: " + targetState);
+                    // 4. Monta a mensagem formatada
+                    var historyMessage = "Movido do " + sourceTeamName + " | " + sourceColumn + 
+                                         " para " + targetTeamName + " | " + targetColumnName;
 
+                    // Monta o Patch JSON
                     var patchDocument = [
+                        { "op": "add", "path": "/fields/System.AreaPath", "value": targetTeamSettings.areaPath },
                         { "op": "add", "path": "/fields/System.State", "value": targetState },
-                        { "op": "add", "path": "/fields/System.History", "value": "Movido via Extensão" }
+                        { "op": "add", "path": "/fields/System.History", "value": historyMessage }
                     ];
+
+                    // Adiciona coluna customizada se existir o campo WEF
+                    if (targetTeamSettings.columnFieldRef) {
+                        patchDocument.push({
+                            "op": "add", 
+                            "path": "/fields/" + targetTeamSettings.columnFieldRef, 
+                            "value": targetColumnName 
+                        });
+                    }
 
                     var witClient = WitRestClient.getClient();
                     
                     witClient.updateWorkItem(patchDocument, id).then(function(updated) {
-                        logStatus("Sucesso! Recarregue a página.", "success");
-                        $moveBtn.disabled = false;
+                        logStatus("Sucesso!", "success");
                         
-                        // CORREÇÃO 2: Usar string direta para o Navigation Service também!
-                        VSS.getService("ms.vss-web.navigation-service").then(function(navigationService) {
-                             if(navigationService.reload) {
-                                 navigationService.reload();
-                             } else {
-                                 window.location.reload();
-                             }
+                        // Atualiza o formulário sem recarregar a página inteira
+                        workItemFormService.refresh().then(function() {
+                            console.log("[move-card] Atualizado.");
                         });
+                        
+                        setTimeout(function(){ $moveBtn.disabled = false; }, 1500);
 
                     }, function(err) {
-                        handleError(err, "Falha ao atualizar Work Item");
-                        $moveBtn.disabled = false;
+                        handleError(err, "Erro ao atualizar");
                     });
                 });
             });
-        }, function(err) {
-            handleError(err, "Falha ao conectar no FormService");
         });
     }
 
-    // Eventos
-    $boardSelect.addEventListener("change", function() { loadColumns(this.value); });
-    $moveBtn.addEventListener("click", moveCard);
+    $boardSelect.addEventListener("change", function() { loadBoardDetails(this.value); });
+    $moveBtn.addEventListener("click", executeMove);
 
-    // Inicialização
     loadTeams();
-    
     VSS.notifyLoadSucceeded();
 });

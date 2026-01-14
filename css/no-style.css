@@ -1,54 +1,91 @@
-:root {
-  color-scheme: light dark;
+/* Força total na transparência da página base */
+html, body {
+  background-color: transparent !important;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: "Segoe UI", "SegoeUI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 #move-card-root {
-  padding: 8px;
-  background: transparent;
-  color: var(--text-primary-color, var(--palette-neutral-foreground1, inherit));
-  font-family: "Segoe UI", "SegoeUI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  padding: 0px 2px;
+  /* Texto se adapta: Branco no Dark Mode, Preto no Light Mode */
+  color: var(--text-primary-color, inherit);
   font-size: 12px;
 }
 
 #move-card-root label {
   display: block;
   margin-bottom: 4px;
-  color: inherit;
+  font-weight: 600;
+  color: var(--text-secondary-color, #666666);
 }
 
-#move-card-root select,
+/* --- ESTILIZAÇÃO DOS CAMPOS (SELECT) --- */
+#move-card-root select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  height: 30px;
+  font-size: 12px;
+  border-radius: 2px;
+  outline: none;
+
+  /* FUNDO DINÂMICO: Usa a cor de fundo do tema (Preto no Dark, Branco no Light) */
+  background-color: var(--background-color, #ffffff);
+  color: var(--text-primary-color, #000000);
+  border: 1px solid var(--palette-neutral-20, #c8c8c8);
+}
+
+#move-card-root select:disabled {
+  background-color: var(--palette-neutral-4, #f4f4f4);
+  color: var(--text-disabled-color, #a6a6a6);
+  border-color: var(--palette-neutral-10, #eaeaea);
+  cursor: not-allowed;
+}
+
+#move-card-root select:focus {
+  border-color: var(--communication-background, #0078d4);
+}
+
+/* Correção para as opções dentro do Select no Dark Mode */
+#move-card-root select option {
+  background-color: var(--background-color, #ffffff);
+  color: var(--text-primary-color, #000000);
+}
+
+/* --- BOTÃO --- */
 #move-card-root button {
   width: 100%;
   box-sizing: border-box;
   padding: 6px;
   font-size: 12px;
-  color: inherit;
-  background-color: var(--component-background-color, transparent);
-  border: 1px solid var(--control-border-color, var(--palette-neutral-foreground3, #8a8886));
-  border-radius: 4px;
+  font-weight: 600;
+  border-radius: 2px;
+  cursor: pointer;
+  margin-top: 10px;
+
+  background-color: var(--communication-background, #0078d4);
+  color: #FFFFFF;
+  border: 1px solid transparent;
 }
 
-#move-card-root button {
-  cursor: pointer;
-  background-color: var(--button-primary-background-color, var(--palette-theme-primary, #0078d4));
-  color: var(--button-primary-foreground-color, #fff);
-  border-color: var(--button-primary-border-color, transparent);
+#move-card-root button:hover {
+  background-color: var(--communication-background-hover, #106ebe);
 }
 
 #move-card-root button:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+  background-color: var(--palette-neutral-10, #eaeaea);
 }
 
-#move-card-root .row {
-  margin-top: 10px;
-}
-
+/* --- STATUS --- */
 #move-card-root #status {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: 11px;
+  min-height: 15px;
 }
-
-#move-card-root .error {
-  color: var(--status-error-text-color, #f1707b);
-}
+#move-card-root .error { color: var(--status-error-text, #da0a00); }
+#move-card-root .success { color: var(--status-success-text, #107c10); }
+#move-card-root .loading { color: var(--text-secondary-color, #666666); font-style: italic; }

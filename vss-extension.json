@@ -1,10 +1,10 @@
 {
     "manifestVersion": 1,
-    "id": "move-card-onprem",
+    "id": "mover-card-onprem",
     "publisher": "JeffersonMota",
-    "version": "0.0.3",
-    "name": "Move Card OnPrem",
-    "description": "Move cards fix permissions and layout",
+    "version": "0.0.1",
+    "name": "Mover Card",
+    "description": "Mover cards entre times e colunas",
     "public": true,
     "categories": ["Azure Boards"],
     "targets": [

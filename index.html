@@ -4,10 +4,71 @@
     <meta charset="utf-8" />
     <title>Mover Card</title>
     <script src="sdk/scripts/VSS.SDK.min.js"></script>
-    <link rel="stylesheet" href="css/no-style.css" />
     <style>
-        .error { color: #f24e4e; font-size: 11px; margin-top: 5px; display: block; }
-        .success { color: #53d038; font-size: 11px; margin-top: 5px; display: block; }
+        /* --- CSS INLINE PARA GARANTIR PRIORIDADE --- */
+        html, body {
+            background-color: transparent !important;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: "Segoe UI", "SegoeUI", -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        #move-card-root {
+            padding: 0px 4px;
+            /* Usa variáveis nativas para herdar a cor do texto do tema (Branco no Dark, Preto no Light) */
+            color: var(--text-primary-color, inherit);
+            font-size: 12px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 4px;
+            font-weight: 600;
+            color: var(--text-secondary-color, #666);
+        }
+
+        select {
+            width: 100%;
+            padding: 4px;
+            height: 30px;
+            font-size: 12px;
+            border-radius: 2px;
+            outline: none;
+            /* Fundo e Texto dinâmicos baseados no tema */
+            background-color: var(--background-color, #fff);
+            color: var(--text-primary-color, #000);
+            border: 1px solid var(--palette-neutral-20, #c8c8c8);
+        }
+
+        select:focus { border-color: var(--communication-background, #0078d4); }
+        
+        /* Garante que o dropdown (opções) também fique escuro no tema dark */
+        select option {
+            background-color: var(--background-color, #fff);
+            color: var(--text-primary-color, #000);
+        }
+
+        button {
+            width: 100%;
+            padding: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 2px;
+            cursor: pointer;
+            margin-top: 10px;
+            background-color: var(--communication-background, #0078d4);
+            color: #fff;
+            border: none;
+        }
+
+        button:hover { background-color: var(--communication-background-hover, #106ebe); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; background-color: var(--palette-neutral-10, #eaeaea); }
+        
+        #status { margin-top: 8px; font-size: 11px; min-height: 15px; }
+        .error { color: var(--status-error-text, #da0a00); }
+        .success { color: var(--status-success-text, #107c10); }
+        .loading { color: var(--text-secondary-color, #666); font-style: italic; }
     </style>
 </head>
 <body>
@@ -21,18 +82,39 @@
             <select id="columnSelect" disabled><option>—</option></select>
         </div>
         <div style="margin-top: 8px;">
-            <button id="moveBtn" class="btn-primary" disabled>Mover Card</button>
+            <button id="moveBtn" disabled>Mover Card</button>
         </div>
         <div id="status"></div>
     </div>
 
     <script type="text/javascript">
+        // Inicializa o VSS pedindo estilos da plataforma (para pegar as variáveis de cor), 
+        // mas vamos sobrescrever o Background
         VSS.init({
             explicitNotifyLoaded: true,
             usePlatformScripts: true,
-            usePlatformStyles: true
+            usePlatformStyles: true 
         });
+
+        // --- FORÇAR TRANSPARÊNCIA (Hack para VSS SDK) ---
+        // O Azure tenta injetar 'background: white' no body. Nós removemos repetidamente.
+        function forceTransparent() {
+            document.body.style.setProperty("background-color", "transparent", "important");
+            document.documentElement.style.setProperty("background-color", "transparent", "important");
+        }
+
+        // Executa imediatamente
+        forceTransparent();
         
+        // E reforça a cada 100ms durante 1 segundo, para garantir que vença o carregamento do Azure
+        var checkCount = 0;
+        var styleInterval = setInterval(function() {
+            forceTransparent();
+            checkCount++;
+            if (checkCount > 10) clearInterval(styleInterval);
+        }, 100);
+
+        // Adiciona um timestamp no require para quebrar o cache do JS
         VSS.require(["scripts/move-card"], function (moveCard) { });
     </script>
 </body>
